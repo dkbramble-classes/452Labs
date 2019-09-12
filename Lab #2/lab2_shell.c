@@ -12,6 +12,8 @@ int main(int argc, char* argv[])
     int done = 0;
     char input[80];
     long prevcsw = 0;
+    time_t total_seconds = 0;
+    suseconds_t total_micro = 0;
 
     while(!done){
     	printf("Enter a command:");
@@ -50,9 +52,6 @@ int main(int argc, char* argv[])
 			if (strcmp(command[0], "quit") != 0){
 				pid_t pid;
 				int status;
-				clock_t start, end;
-				double cpu_used;
-				start = clock();
 			    if ((pid = fork()) < 0) { //create a child process
 			        perror("fork failure");
 			        exit(1);
@@ -63,18 +62,24 @@ int main(int argc, char* argv[])
 					}
 			    } else {
 			    	waitpid(pid, &status, 0); //parent waits for child to finish
-		    		long invcsw;
+		    		long invcsw, seconds_usage;
+		    		int micro_usage;
 					struct rusage usage;
 
-			    	end = clock();
 			    	if(status == 0) {
-			    		//ls -a -l -F
-			    		cpu_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-			    		getrusage(RUSAGE_CHILDREN, &usage);
+			    		getrusage(RUSAGE_CHILDREN, &usage); //get usage statistics for the child processes, returns running total
+			    		//subtract from the total
 			    		invcsw = (usage.ru_nivcsw - prevcsw);
-			    		prevcsw = prevcsw + invcsw;
-			    		printf("\nUses %f seconds, %f microseconds\n", cpu_used, (cpu_used * 1000000));
+			    		seconds_usage = usage.ru_utime.tv_sec - total_seconds;
+			    		micro_usage = usage.ru_utime.tv_usec - total_micro;
+
+			    		printf("\nUses %ld seconds, %d microseconds\n", seconds_usage, micro_usage);
 			    		printf("Context switches: %li\n\n", invcsw);
+
+			    		//Keep track of previous totals
+			    		prevcsw = usage.ru_nivcsw;
+			    		total_micro = usage.ru_utime.tv_usec;
+			    		total_seconds = usage.ru_utime.tv_sec;
 			    	}
 			    }
 
